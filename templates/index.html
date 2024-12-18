@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redes Wi-Fi</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 80%;
+            max-width: 800px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f4f4f4;
+        }
+
+        tr.open {
+            background-color: #014cfc43;  /* Azul claro para redes abertas */
+        }
+
+        tr.connected {
+            background-color: #d4edda;  /* Verde para redes conectadas */
+        }
+
+        .signal-bar {
+            width: 100%;
+            height: 10px;
+            background-color: #ddd;
+            border-radius: 5px;
+            margin-top: 5px;
+        }
+
+        .signal-fill {
+            height: 100%;
+            border-radius: 5px;
+        }
+
+        .strong {
+            background-color: #4CAF50;
+        }
+
+        .medium {
+            background-color: #FFC107;
+        }
+
+        .weak {
+            background-color: #FF5722;
+        }
+
+        button {
+            display: block;
+            margin: 0 auto 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            color: #fff;
+            background-color: #007BFF;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .disabled {
+            background-color: #d6d6d6;
+            cursor: not-allowed;
+        }
+
+        button.auto-on {
+    background-color: #FFC107; /* Amarelo */
+    border: none;
+    color: white;
+}
+
+button.auto-on:hover {
+    background-color: #ff9800; /* Tom mais escuro de amarelo para o hover */
+}
+
+button.auto-off {
+    background-color: #007BFF; /* Azul original */
+    border: none;
+    color: white;
+}
+
+button.auto-off:hover {
+    background-color: #0056b3; /* Tom mais escuro de azul para o hover */
+}
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Redes Wi-Fi Disponíveis</h1>
+        <button id="refresh-button">Atualizar</button>
+        <button id="auto-mode-button">Automático</button>
+        <table id="wifi-list">
+            <thead>
+                <tr>
+                    <th>SSID</th>
+                    <th>Segurança</th>
+                    <th>Status</th>
+                    <th>Sinal</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- As redes Wi-Fi serão inseridas aqui via JavaScript -->
+            </tbody>
+        </table>
+    </div>
+    <audio id="open-network-sound" src="{{ url_for('static', filename='audio/4.mp3') }}" preload="auto"></audio>
+
+
+    <script>
+       let autoMode = false;  // Indica se o modo automático está ativado
+let autoModeInterval;
+let openNetworkFound = false;  // Variável para verificar se rede aberta foi encontrada
+let soundInterval;
+
+async function getNetworks() {
+    try {
+        const response = await fetch('http://127.0.0.1:5000/get_networks');
+        const networks = await response.json();
+        displayNetworks(networks);
+    } catch (error) {
+        console.error('Erro ao buscar as redes Wi-Fi:', error);
+    }
+}
+
+function displayNetworks(networks) {
+    const wifiList = document.getElementById('wifi-list').getElementsByTagName('tbody')[0];
+    wifiList.innerHTML = '';  // Limpar tabela antes de adicionar novas redes
+
+    // Verificar se há redes abertas e tocar o som
+    let openNetworkDetected = false;
+
+    networks.forEach(network => {
+        const row = wifiList.insertRow();
+
+        const ssidCell = row.insertCell(0);
+        ssidCell.textContent = network.ssid;
+
+        const securityCell = row.insertCell(1);
+        securityCell.textContent = network.security;
+
+        const statusCell = row.insertCell(2);
+        statusCell.textContent = network.connected ? 'Conectado' : 'Desconectado';
+
+        if (network.security === 'Open' || network.security === '0') {
+            row.classList.add('open');
+            openNetworkDetected = true;  // Rede aberta detectada
+        } else if (network.connected) {
+            row.classList.add('connected');
+        }
+
+        const signalBarCell = row.insertCell(3);
+        const signalBar = document.createElement('div');
+        signalBar.classList.add('signal-bar');
+        const signalFill = document.createElement('div');
+        signalFill.classList.add('signal-fill');
+
+        signalFill.style.width = `${network.signal_percentage}%`;
+
+        if (network.signal_percentage > 66) {
+            signalFill.classList.add('strong');
+        } else if (network.signal_percentage > 33) {
+            signalFill.classList.add('medium');
+        } else {
+            signalFill.classList.add('weak');
+        }
+
+        signalBar.appendChild(signalFill);
+        signalBarCell.appendChild(signalBar);
+    });
+
+    // Se uma rede aberta foi detectada e o som não está tocando, comece a tocar
+    if (openNetworkDetected && !openNetworkFound) {
+        openNetworkFound = true;
+        startSound();
+    } else if (!openNetworkDetected && openNetworkFound) {
+        openNetworkFound = false;
+        stopSound();
+    }
+}
+
+function startSound() {
+    const sound = document.getElementById('open-network-sound');
+    sound.play();
+    soundInterval = setInterval(() => {
+        sound.play();
+    }, 5000);  // Reproduz o som a cada 5 segundos
+}
+
+function stopSound() {
+    const sound = document.getElementById('open-network-sound');
+    clearInterval(soundInterval);  // Para o som a cada 5 segundos
+    sound.pause();
+    sound.currentTime = 0;  // Reseta o som para o começo
+}
+
+function toggleAutoMode() {
+    const autoModeButton = document.getElementById('auto-mode-button');
+    const refreshButton = document.getElementById('refresh-button');
+
+    if (autoMode) {
+        clearInterval(autoModeInterval);
+        autoModeButton.textContent = 'Ativar Modo Automático';
+        refreshButton.classList.remove('disabled');
+        refreshButton.disabled = false;
+        autoModeButton.classList.remove('auto-on');  // Remove a classe 'auto-on' se estiver desativando
+        autoModeButton.classList.add('auto-off');    // Adiciona a classe 'auto-off'
+        autoMode = false;
+    } else {
+        autoModeInterval = setInterval(getNetworks, 3000);
+        autoModeButton.textContent = 'Desativar Automático';
+        refreshButton.classList.add('disabled');
+        refreshButton.disabled = true;
+        autoModeButton.classList.remove('auto-off');  // Remove a classe 'auto-off' se estiver ativando
+        autoModeButton.classList.add('auto-on');      // Adiciona a classe 'auto-on' (amarelo)
+        autoMode = true;
+    }
+}
+
+document.getElementById('refresh-button').addEventListener('click', getNetworks);
+document.getElementById('auto-mode-button').addEventListener('click', toggleAutoMode);
+
+getNetworks();
+
+    </script>
+</body>
+</html>
