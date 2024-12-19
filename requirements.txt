@@ -16,7 +16,7 @@ defusedxml==0.7.1
 distlib==0.3.9
 Django==5.1.2
 filelock==3.16.1
-Flask==2.3.2
+Flask==3.0.3
 hyperlink==21.0.0
 idna==3.10
 incremental==24.7.2
